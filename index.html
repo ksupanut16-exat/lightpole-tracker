@@ -261,25 +261,60 @@
       }
 
       /* ===== อัปเดตสถานะ → GET ผ่าน proxy (กัน 502/redirect) ===== */
-      function sendStatusToSheet(name, newStatus) {
-  const fullURL = PROXY + encodeURIComponent(WEBHOOK_URL);
+      async function sendStatusToSheet(name, newStatus) {
   const user = usernameInput.value.trim() || "ไม่ระบุผู้ตรวจ";
+  const payload = { name, status: newStatus, user };
+  const proxyUrl = PROXY + encodeURIComponent(WEBHOOK_URL) + "&_ts=" + Date.now();
 
-  fetch(fullURL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, status: newStatus, user })
-  })
-  .then(r => r.json())
-  .then(j => {
-    if (!j.ok) throw new Error(j.error || "unknown error");
+  async function tryProxy() {
+    const r = await fetch(proxyUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+    });
+    if (!r.ok) throw new Error("proxy " + r.status);
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || "script error");
+  }
+
+  async function tryDirectNoCors() {
+    // ยิงตรงไป Apps Script แบบ no-cors (จะไม่ได้อ่านผลลัพธ์ แต่ส่วนใหญ่ส่งถึงแน่ ๆ)
+    await fetch(WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      mode: "no-cors",
+      cache: "no-store",
+    });
+  }
+
+  try {
+    await tryProxy();
     showToast(`✅ บันทึก "${newStatus}" แล้ว (${name})`, "success");
-  })
-  .catch(err => {
-    console.error("Save failed:", err);
-    showToast("❌ บันทึกล้มเหลว: " + err.message, "error");
-  });
+  } catch (e) {
+    console.warn("Proxy ส่งไม่สำเร็จ:", e);
+
+    // Fallback ยิงตรง → แล้วรีโหลดข้อมูลจากชีตเพื่อยืนยัน
+    try {
+      await tryDirectNoCors();
+      // เว้นให้ GAS เขียนชีตเสี้ยววิ แล้วค่อยโหลดซ้ำมายืนยัน
+      await new Promise(res => setTimeout(res, 900));
+      await loadSheetData();
+
+      const m = markerByName.get(name);
+      if (m && String(m.options.status || "").includes(newStatus.replace("ไฟ",""))) {
+        showToast(`✅ บันทึกแล้ว (${name})`, "success");
+      } else {
+        throw new Error("verify-failed");
+      }
+    } catch (e2) {
+      console.error("Direct fallback failed:", e2);
+      showToast("❌ บันทึกล้มเหลว (เครือข่าย/Proxy): ลองอีกครั้ง", "error");
+    }
+  }
 }
+
 
 
       function createPopup(marker, name, status, color) {
