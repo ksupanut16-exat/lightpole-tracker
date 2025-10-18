@@ -262,30 +262,25 @@
 
       /* ===== อัปเดตสถานะ → GET ผ่าน proxy (กัน 502/redirect) ===== */
       function sendStatusToSheet(name, newStatus) {
-        const user = usernameInput.value.trim() || "ไม่ระบุผู้ตรวจ";
-        const qs = `?action=updateStatus&name=${encodeURIComponent(name)}&status=${encodeURIComponent(newStatus)}&user=${encodeURIComponent(user)}&ts=${Date.now()}`;
-        const direct = WEBHOOK_URL + qs;
-        const urlViaProxy = PROXY + encodeURIComponent(direct);
+  const fullURL = PROXY + encodeURIComponent(WEBHOOK_URL);
+  const user = usernameInput.value.trim() || "ไม่ระบุผู้ตรวจ";
 
-        fetch(urlViaProxy, { method: "GET" })
-          .then(async (r) => {
-            const txt = await r.text().catch(() => "");
-            if (!r.ok) throw new Error(`HTTP ${r.status} ${txt || ""}`);
-            showToast(`✅ บันทึก "${newStatus}" แล้ว (${name})`, "success");
-            console.log("updateStatus OK:", txt);
-          })
-          .catch(async (e) => {
-            console.error("updateStatus ERROR (proxy):", e);
-            // สำรอง: ยิงตรงแบบ no-cors (อ่านผลไม่ได้ แต่ช่วยเคส proxy ล่ม)
-            try {
-              await fetch(direct, { method: "GET", mode: "no-cors" });
-              showToast(`✅ บันทึก (สำรอง) "${newStatus}" แล้ว (${name})`, "success");
-            } catch (e2) {
-              console.error("updateStatus ERROR (direct):", e2);
-              showToast("❌ บันทึกล้มเหลว! ดู console", "error");
-            }
-          });
-      }
+  fetch(fullURL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, status: newStatus, user })
+  })
+  .then(r => r.json())
+  .then(j => {
+    if (!j.ok) throw new Error(j.error || "unknown error");
+    showToast(`✅ บันทึก "${newStatus}" แล้ว (${name})`, "success");
+  })
+  .catch(err => {
+    console.error("Save failed:", err);
+    showToast("❌ บันทึกล้มเหลว: " + err.message, "error");
+  });
+}
+
 
       function createPopup(marker, name, status, color) {
         const div = document.createElement("div");
