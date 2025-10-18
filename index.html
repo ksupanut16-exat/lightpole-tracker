@@ -7,6 +7,7 @@
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
+    
     html, body { height: 100%; margin: 0; padding: 0; font-family: "Segoe UI", Tahoma, sans-serif; background: #f5f6fa; }
     #map { height: 100vh; width: 100%; z-index: 1; }
 
@@ -105,6 +106,40 @@
       .top-controls .filter-bar{ max-width: 88vw; }
       .top-controls .filter-bar input{ flex: 1; min-width: 120px; }
     }
+    /* Bottom sheet / side panel */
+:root{ --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px); }
+.sheet{
+  position: fixed; left: 0; right: 0; bottom: 0;
+  background: #fff; border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 24px rgba(0,0,0,.2);
+  transform: translateY(100%); transition: transform .25s ease;
+  z-index: 4000; max-height: calc(75dvh + var(--safe-bottom)); padding-bottom: var(--safe-bottom);
+}
+.sheet.open{ transform: translateY(0); }
+.sheet.hidden{ display: none; }
+.sheet-handle{
+  width: 44px; height: 4px; border-radius: 999px;
+  background: #ccc; margin: 10px auto;
+}
+.sheet-content{ padding: 8px 16px 16px; overflow: auto; max-height: 70dvh; }
+.sheet-title{ margin: 0 0 6px 0; font-size: 16px; }
+.meta-grid{
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px;
+  font-size: 13.5px;
+}
+.meta-grid label{ display:block; font-size:12px; opacity:.7; margin-bottom:2px; }
+.links a{ display:inline-block; margin-right:8px; font-size:13.5px; }
+.sheet-actions{ display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+
+/* บนจอใหญ่: แสดงเป็น side panel ขวา */
+@media (min-width: 900px){
+  .sheet{
+    left: auto; right: 16px; bottom: 16px;
+    border-radius: 12px; width: 380px; transform: translateY(0);
+  }
+  .sheet.hidden{ display:none; }
+}
+
   </style>
 </head>
 <body>
@@ -318,6 +353,77 @@
 
 
       function createPopup(marker, name, status, color) {
+        // ===== Helpers สำหรับแผงรายละเอียด =====
+const sheetEl = document.getElementById("detailsSheet");
+const sheetClose = document.getElementById("sheetClose");
+const dName = document.getElementById("dName");
+const dItem = document.getElementById("dItem");
+const dMechanic = document.getElementById("dMechanic");
+const dLastFix = document.getElementById("dLastFix");
+const dDirection = document.getElementById("dDirection");
+const dLastEditor = document.getElementById("dLastEditor");
+const dLastUpdated = document.getElementById("dLastUpdated");
+const dLinks = document.getElementById("dLinks");
+
+function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
+function fill(el, v){ el.innerHTML = (v && String(v).trim()) ? esc(v) : "<span style='opacity:.6'>-</span>"; }
+
+let sheetMarker = null;
+function openSheetFor(marker){
+  sheetMarker = marker;
+  const m = marker.options;
+  const meta = m.meta || {};
+  dName.textContent = m.name || "-";
+  fill(dItem, meta.item);
+  fill(dMechanic, meta.mechanic);
+  fill(dLastFix, meta.lastFix);
+  fill(dDirection, meta.direction);
+  fill(dLastEditor, meta.lastEditor);
+  fill(dLastUpdated, meta.lastUpdated);
+
+  // ลิงก์ (รูป/ใบแจ้งงาน)
+  dLinks.innerHTML = "";
+  if (meta.photo)  dLinks.innerHTML += `📷 <a href="${esc(meta.photo)}" target="_blank" rel="noopener">รูปถ่าย</a> `;
+  if (meta.ticket) dLinks.innerHTML += `📄 <a href="${esc(meta.ticket)}" target="_blank" rel="noopener">ใบแจ้งงาน</a> `;
+
+  // เปิดแผง
+  sheetEl.classList.remove("hidden");
+  // หน่วงนิดให้ transition ทำงาน
+  requestAnimationFrame(()=> sheetEl.classList.add("open"));
+}
+function closeSheet(){
+  sheetEl.classList.remove("open");
+  setTimeout(()=> sheetEl.classList.add("hidden"), 200);
+}
+sheetClose.addEventListener("click", closeSheet);
+sheetEl.addEventListener("click", (e)=>{ if(e.target===sheetEl) closeSheet(); });
+
+// ปุ่มสถานะในแผง (ใช้ฟังก์ชันเดิมเพื่ออัปเดต/บันทึก)
+["dOnA","dOnB","dOnAB","dOffA","dOffB","dOffAB"].forEach(id=>{
+  document.getElementById(id).addEventListener("click", ()=>{
+    if(!sheetMarker) return;
+    const name = sheetMarker.options.name;
+    const mapStatus = {
+      dOnA:"ไฟติดA", dOnB:"ไฟติดB", dOnAB:"ไฟติดAB",
+      dOffA:"ไฟดับA", dOffB:"ไฟดับB", dOffAB:"ไฟดับAB"
+    };
+    const newStatus = mapStatus[id];
+    // reuse logic เดิม
+    const newColor = colorFor(newStatus, name);
+    sheetMarker.setIcon(circleIcon(newColor));
+    sheetMarker.options.status = newStatus;
+    // อัปเดต meta แสดงผล
+    const editor = (usernameInput?.value || "").trim() || "ไม่ระบุผู้ตรวจ";
+    sheetMarker.options.meta = sheetMarker.options.meta || {};
+    sheetMarker.options.meta.lastEditor = editor;
+    sheetMarker.options.meta.lastUpdated = new Date().toLocaleString();
+
+    sendStatusToSheet(name, newStatus);
+    applyFilters();
+    showToast(`✅ บันทึก "${newStatus}" แล้ว (${name})`, "success");
+  });
+});
+
         const div = document.createElement("div");
         div.innerHTML = `
           <b>${name}</b><br>
@@ -441,6 +547,25 @@ function cell(r, idx){
       createPopup(m, name, status, color);
       markers.push(m);
       markerByName.set(name || `row_${i}`, m);
+      // ใน div.innerHTML ของ popup เพิ่มปุ่ม "รายละเอียด" ต่อท้ายปุ่มสถานะ
+div.innerHTML = `
+  <b>${escapeHtml(name)}</b><br>
+  🔰 <b id="statusText" style="color:${color}">${escapeHtml(status || "-")}</b><br><br>
+  <div class="btn-row">
+    <button class="btn btn-green" id="onA">ไฟติด A</button>
+    <button class="btn btn-green" id="onB">ไฟติด B</button>
+    <button class="btn btn-green" id="onAB">ไฟติด AB</button>
+    <button class="btn btn-red"   id="offA">ไฟดับ A</button>
+    <button class="btn btn-red"   id="offB">ไฟดับ B</button>
+    <button class="btn btn-red"   id="offAB">ไฟดับ AB</button>
+    <button class="btn" id="moreDetail">ℹ️ รายละเอียด</button>  <!-- ★ เพิ่มปุ่มนี้ -->
+  </div>
+  ${extraHtml}
+`;
+
+// ใน marker.on("popupopen", ...)
+div.querySelector("#moreDetail").onclick = () => openSheetFor(marker);
+
     });
 
     if (markers.length && (!firstDataLoaded || (AUTO_FIT_ON_REFRESH_WHEN_NOT_TRACKING && !watchID))) {
@@ -592,5 +717,32 @@ function cell(r, idx){
       });
     };
   </script>
+<!-- Bottom Sheet / Side Panel -->
+<div id="detailsSheet" class="sheet hidden" aria-hidden="true">
+  <div class="sheet-handle" role="button" id="sheetClose" title="ปิด"></div>
+  <div class="sheet-content">
+    <h3 id="dName" class="sheet-title">-</h3>
+
+    <div class="meta-grid">
+      <div><label>รายการ</label><div id="dItem">-</div></div>
+      <div><label>ผู้ซ่อม</label><div id="dMechanic">-</div></div>
+      <div><label>การซ่อมล่าสุด</label><div id="dLastFix">-</div></div>
+      <div><label>ทิศทาง</label><div id="dDirection">-</div></div>
+      <div><label>ผู้แก้ไขล่าสุด</label><div id="dLastEditor">-</div></div>
+      <div><label>อัปเดตล่าสุด</label><div id="dLastUpdated">-</div></div>
+      <div id="dLinks" class="links"></div>
+    </div>
+
+    <div class="sheet-actions">
+      <button id="dOnA"  class="btn btn-green">ไฟติด A</button>
+      <button id="dOnB"  class="btn btn-green">ไฟติด B</button>
+      <button id="dOnAB" class="btn btn-green">ไฟติด AB</button>
+      <button id="dOffA" class="btn btn-red">ไฟดับ A</button>
+      <button id="dOffB" class="btn btn-red">ไฟดับ B</button>
+      <button id="dOffAB"class="btn btn-red">ไฟดับ AB</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
