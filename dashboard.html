@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Lightpole Dashboard</title>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#0f172a; --card:#111827; --muted:#94a3b8; --accent:#0ea5e9; --ok:#10b981; --warn:#ef4444;
+    }
+    *{ box-sizing: border-box; }
+    html,body{ margin:0; background:#0b1220; color:#e5e7eb; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+    a{ color:#93c5fd; text-decoration:none; }
+    header{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 16px; position:sticky; top:0; background:rgba(11,18,32,.85); backdrop-filter: blur(8px); z-index:5;
+      border-bottom:1px solid rgba(148,163,184,.15);
+    }
+    .brand{ font-weight:700; letter-spacing:.2px; }
+    .subtle{ color:var(--muted); font-size:13px; }
+    .container{ max-width:1100px; margin:14px auto; padding:0 12px 40px; }
+
+    .toolbar{
+      display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0 16px;
+      background: rgba(255,255,255,.04); padding:10px; border-radius:12px; border:1px solid rgba(148,163,184,.12);
+    }
+    .toolbar input{
+      background:#0b1220; color:#e5e7eb; border:1px solid rgba(148,163,184,.25);
+      padding:8px 10px; border-radius:8px; font-size:14px;
+    }
+    .toolbar button{
+      background: var(--accent); color:white; border:0; padding:8px 12px; border-radius:8px; font-weight:600; cursor:pointer;
+    }
+
+    .grid{ display:grid; gap:12px; grid-template-columns: 1fr; }
+    @media (min-width: 900px){ .grid{ grid-template-columns: 1.2fr 1fr; } }
+
+    .cards{ display:grid; gap:12px; grid-template-columns: repeat(2, 1fr); margin:12px 0; }
+    @media (min-width: 700px){ .cards{ grid-template-columns: repeat(4, 1fr);} }
+
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02));
+      border:1px solid rgba(148,163,184,.12); border-radius:14px;
+      padding:12px; min-height:84px;
+    }
+    .card .k{ font-size:12px; color:var(--muted); }
+    .card .v{ font-size:22px; font-weight:800; margin-top:6px; }
+    .ok{ color: var(--ok); } .warn{ color: var(--warn); }
+
+    .panel{
+      background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02));
+      border:1px solid rgba(148,163,184,.12); border-radius:14px; padding:12px;
+    }
+    .panel h3{ margin:0 0 8px; font-size:16px; }
+    .muted{ color: var(--muted); }
+
+    canvas{ width:100% !important; height:320px !important; }
+
+    table{ width:100%; border-collapse: collapse; font-size:13px; }
+    th, td{ padding:8px 10px; border-bottom:1px solid rgba(148,163,184,.12); }
+    th{ text-align:left; color:var(--muted); font-weight:600; font-size:12px; }
+    tbody tr:hover{ background: rgba(255,255,255,.03); }
+    .badge{ display:inline-block; border:1px solid rgba(148,163,184,.25); border-radius:999px; padding:2px 8px; font-size:12px; }
+    .badge.ok{ border-color: rgba(16,185,129,.3); color:#a7f3d0; }
+    .badge.warn{ border-color: rgba(239,68,68,.35); color:#fecaca; }
+
+    .row{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .grow{ flex: 1; }
+    .right{ text-align:right; }
+
+    .toast{
+      position: fixed; bottom: 16px; right: 16px; background: #111827; color:#fff;
+      border:1px solid rgba(148,163,184,.2); border-radius:10px; padding:10px 12px; font-size:14px;
+      opacity:0; transform: translateY(10px); transition: all .25s ease; z-index:10;
+    }
+    .toast.show{ opacity:1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="brand">Lightpole Dashboard</div>
+      <div class="subtle">สถิติไฟติด-ไฟดับ เพื่อวางแผนซ่อมบำรุง</div>
+    </div>
+    <div class="subtle"><a href="./">🔙 ไปหน้าแผนที่</a></div>
+  </header>
+
+  <div class="container">
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="row grow">
+        <div>
+          ช่วงสถิติ:
+          <input type="date" id="fromDate">
+          <input type="date" id="toDate">
+          <button id="applyRange">ดูสถิติช่วงนี้</button>
+        </div>
+      </div>
+      <div class="subtle">* ช่วงวันที่ใช้กับ “กราฟไฟดับ/วัน” และ “Top เสาที่ดับบ่อย”</div>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="cards" id="cards">
+      <div class="card"><div class="k">เสาทั้งหมด</div><div class="v" id="totalPoles">-</div></div>
+      <div class="card"><div class="k">ไฟติด (ปัจจุบัน)</div><div class="v ok" id="onCount">-</div></div>
+      <div class="card"><div class="k">ไฟดับ (ปัจจุบัน)</div><div class="v warn" id="offCount">-</div></div>
+      <div class="card"><div class="k">ชนิด: SP / HM / อื่น</div><div class="v" id="typeCounts">-</div></div>
+    </div>
+
+    <div class="grid">
+      <!-- Left column -->
+      <div class="panel">
+        <h3>กราฟจำนวน “ไฟดับ” รายวัน</h3>
+        <div class="subtle">จาก Log การเปลี่ยนสถานะในช่วงวันที่เลือก</div>
+        <canvas id="dailyOffChart"></canvas>
+      </div>
+
+      <!-- Right column -->
+      <div class="panel">
+        <h3>สัดส่วนสถานะปัจจุบัน</h3>
+        <div class="subtle">นับจากแท็บข้อมูลหลัก (ปัจจุบัน)</div>
+        <canvas id="currentPie"></canvas>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:12px">
+      <div class="row">
+        <h3 class="grow">Top 10 เสาที่ “ไฟดับ” บ่อยสุด (ช่วงที่เลือก)</h3>
+        <div class="muted">ดูตามจำนวน entry “ไฟดับ” ในแท็บ Logs</div>
+      </div>
+      <canvas id="topOffBar"></canvas>
+    </div>
+
+    <div class="panel" style="margin-top:12px">
+      <div class="row">
+        <h3 class="grow">บันทึกล่าสุด</h3>
+        <div class="muted">50 รายการล่าสุดจากแท็บ Logs</div>
+      </div>
+      <div style="overflow:auto">
+        <table id="logTable">
+          <thead>
+            <tr>
+              <th>เวลา</th>
+              <th>ชื่อเสา</th>
+              <th>สถานะเดิม</th>
+              <th>สถานะใหม่</th>
+              <th>ผู้แก้ไข</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    /* ============ CONFIG ============ */
+    const SHEET_ID = "1lOm7yLsXgSEod9A2l0YCerJdiHI2lD0m5JMPqYqmupY";       // <-- 1lOm7yLsXgSEod9A2l0YCerJdiHI2lD0m5JMPqYqmupY ใส่ SHEET ID ของคุณ
+    const MAIN_SHEET_NAME = "sheets1";                // <-- ชื่อแท็บข้อมูลหลัก (ปรับได้)
+    const LOG_SHEET_NAME  = "Logs";                  // <-- ชื่อแท็บ Logs
+
+    const MAIN_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(MAIN_SHEET_NAME)}`;
+    const LOG_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(LOG_SHEET_NAME)}`;
+
+    /* ============ Utilities ============ */
+    const $ = sel => document.querySelector(sel);
+    function showToast(msg){
+      const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+      setTimeout(()=> t.classList.remove('show'), 2400);
+    }
+    function parseGViz(text){
+      const start = text.indexOf('{'); const end = text.lastIndexOf('}');
+      return JSON.parse(text.slice(start, end+1));
+    }
+    function colIndexByLabels(cols, labels){
+      const lows = labels.map(s=>s.toLowerCase());
+      return cols.findIndex(c => lows.includes(String(c.label||'').trim().toLowerCase()));
+    }
+    function cell(row, idx){ return row?.c?.[idx]?.v ?? row?.c?.[idx]?.f ?? ""; }
+
+    // Parse Date from GViz (support Date(YYYY,MM,DD,hh,mm,ss) or string)
+    function parseGVizDate(v){
+      if (!v) return null;
+      if (typeof v === 'string'){
+        const m = v.match(/Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?\)/);
+        if (m){
+          const [_, Y,M,D,h=0,mn=0,s=0] = m.map(Number);
+          return new Date(Y, M, D, h, mn, s);
+        }
+        // plain string to Date
+        const d = new Date(v);
+        return isNaN(d) ? null : d;
+      }
+      if (typeof v === 'object' && v !== null && 'f' in v) {
+        const d = new Date(v.f); return isNaN(d) ? null : d;
+      }
+      return v instanceof Date ? v : null;
+    }
+
+    function isOn(status){ return /ไฟติด/i.test(String(status)); }
+    function isOff(status){ return /ไฟดับ/i.test(String(status)); }
+    function typeOfPole(name, status){
+      const s = String(status||''); const n = String(name||'');
+      if (/^SP/i.test(n) || /^SP/i.test(s)) return 'SP';
+      if (/^HM/i.test(n) || /^HM/i.test(s)) return 'HM';
+      return 'OTHER';
+    }
+    function fmtDate(d){
+      return d ? d.toLocaleString('th-TH', { dateStyle:'medium', timeStyle:'short' }) : '-';
+    }
+    function fmtDay(d){
+      return d ? d.toLocaleDateString('th-TH', { dateStyle:'medium' }) : '-';
+    }
+
+    /* ============ Charts refs ============ */
+    let dailyOffChart, currentPieChart, topOffBarChart;
+
+    function makeLine(ctx, labels, data){
+      return new Chart(ctx, {
+        type:'line',
+        data:{ labels, datasets:[{ label:'ไฟดับ/วัน', data, tension:.3 }] },
+        options:{ responsive:true, plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } } } }
+      });
+    }
+    function makePie(ctx, on, off, unk){
+      return new Chart(ctx, {
+        type:'doughnut',
+        data:{ labels:['ไฟติด','ไฟดับ','ไม่ทราบ'], datasets:[{ data:[on,off,unk] }] },
+        options:{ plugins:{ legend:{ position:'bottom' } } }
+      });
+    }
+    function makeBar(ctx, labels, data){
+      return new Chart(ctx, {
+        type:'bar',
+        data:{ labels, datasets:[{ label:'จำนวนไฟดับ', data }] },
+        options:{ indexAxis:'y', plugins:{ legend:{ display:false } }, scales:{ x:{ beginAtZero:true, ticks:{ precision:0 } } } }
+      });
+    }
+
+    /* ============ Loaders ============ */
+    async function fetchGViz(url){
+      const r = await fetch(url, { cache:'no-store' });
+      const t = await r.text();
+      return parseGViz(t);
+    }
+
+    function setDefaultRange(){
+      const to = new Date();
+      const from = new Date(); from.setDate(to.getDate() - 30);
+      $('#fromDate').value = from.toISOString().slice(0,10);
+      $('#toDate').value   = to.toISOString().slice(0,10);
+    }
+
+    function getRange(){
+      const f = $('#fromDate').value, t = $('#toDate').value;
+      const from = f ? new Date(`${f}T00:00:00`) : null;
+      const to   = t ? new Date(`${t}T23:59:59`) : null;
+      return { from, to };
+    }
+    function inRange(d, from, to){
+      if (!d) return false;
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    }
+
+    async function loadAll(){
+      try{
+        showToast('⏳ กำลังโหลดข้อมูล…');
+        const [main, logs] = await Promise.all([fetchGViz(MAIN_URL), fetchGViz(LOG_URL)]);
+
+        // ===== Main sheet summary =====
+        const mcols = main.table.cols;
+        const mrows = main.table.rows;
+        const idx = {
+          name:   colIndexByLabels(mcols, ['name','ชื่อ','ชื่อเสา']),
+          lat:    colIndexByLabels(mcols, ['latitude','lat','ละติจูด']),
+          lng:    colIndexByLabels(mcols, ['longitude','lng','ลองจิจูด']),
+          status: colIndexByLabels(mcols, ['status','สถานะ'])
+        };
+        const items = [];
+        for (const r of mrows){
+          const name = cell(r, idx.name);
+          const status = cell(r, idx.status);
+          const lat = cell(r, idx.lat), lng = cell(r, idx.lng);
+          if (!lat || !lng) continue;
+          items.push({ name, status });
+        }
+
+        const total = items.length;
+        const onCount  = items.filter(x=>isOn(x.status)).length;
+        const offCount = items.filter(x=>isOff(x.status)).length;
+        const unkCount = total - onCount - offCount;
+        const sp = items.filter(x=>typeOfPole(x.name,x.status)==='SP').length;
+        const hm = items.filter(x=>typeOfPole(x.name,x.status)==='HM').length;
+        const other = total - sp - hm;
+
+        $('#totalPoles').textContent = total.toLocaleString();
+        $('#onCount').textContent = onCount.toLocaleString();
+        $('#offCount').textContent = offCount.toLocaleString();
+        $('#typeCounts').textContent = `${sp} / ${hm} / ${other}`;
+
+        // pie
+        if (currentPieChart) currentPieChart.destroy();
+        currentPieChart = makePie($('#currentPie'), onCount, offCount, unkCount);
+
+        // ===== Logs analytics =====
+        const lcols = logs.table.cols;
+        const lrows = logs.table.rows;
+        const L = {
+          time:      colIndexByLabels(lcols, ['เวลา','time','timestamp']),
+          name:      colIndexByLabels(lcols, ['ชื่อเสา','name']),
+          oldStatus: colIndexByLabels(lcols, ['สถานะเดิม','old','oldstatus']),
+          newStatus: colIndexByLabels(lcols, ['สถานะใหม่','new','newstatus']),
+          editor:    colIndexByLabels(lcols, ['ผู้แก้ไข','ผู้แก้ไขล่าสุด','editor','user'])
+        };
+
+        // table last 50
+        const tbody = $('#logTable tbody');
+        tbody.innerHTML = '';
+        const latest = [...lrows].slice(-50).reverse();
+        for (const r of latest){
+          const d = parseGVizDate(cell(r, L.time));
+          const name = cell(r, L.name);
+          const oldS = cell(r, L.oldStatus);
+          const newS = cell(r, L.newStatus);
+          const editor = cell(r, L.editor);
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${fmtDate(d)}</td>
+            <td>${name || '-'}</td>
+            <td><span class="badge ${isOff(oldS)?'warn':isOn(oldS)?'ok':''}">${oldS||'-'}</span></td>
+            <td><span class="badge ${isOff(newS)?'warn':isOn(newS)?'ok':''}">${newS||'-'}</span></td>
+            <td>${editor || '-'}</td>
+          `;
+          tbody.appendChild(tr);
+        }
+
+        // analytics by selected range
+        const { from, to } = getRange();
+
+        // per-day OFF counts
+        const dayMap = new Map(); // key: yyyy-mm-dd, val: count
+        // top poles OFF counts
+        const offByPole = new Map();
+
+        for (const r of lrows){
+          const d   = parseGVizDate(cell(r, L.time));
+          const nm  = String(cell(r, L.name) || '');
+          const nst = String(cell(r, L.newStatus) || '');
+          if (!inRange(d, from, to)) continue;
+
+          if (isOff(nst)){
+            const key = d.toISOString().slice(0,10);
+            dayMap.set(key, (dayMap.get(key)||0)+1);
+            offByPole.set(nm, (offByPole.get(nm)||0)+1);
+          }
+        }
+
+        // build arrays sorted by day
+        const keys = Array.from(dayMap.keys()).sort();
+        const dailyLabels = keys.map(k=>{
+          const [y,m,d] = k.split('-').map(Number);
+          return new Date(y, m-1, d);
+        });
+        const dailyCounts = keys.map(k=> dayMap.get(k));
+
+        if (dailyOffChart) dailyOffChart.destroy();
+        dailyOffChart = makeLine($('#dailyOffChart'), dailyLabels.map(fmtDay), dailyCounts);
+
+        // top off poles (desc)
+        const top = Array.from(offByPole.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10);
+        const topLabels = top.map(([n])=>n);
+        const topCounts = top.map(([_,c])=>c);
+        if (topOffBarChart) topOffBarChart.destroy();
+        topOffBarChart = makeBar($('#topOffBar'), topLabels, topCounts);
+
+        showToast('✅ โหลดข้อมูลสำเร็จ');
+      }catch(e){
+        console.error(e);
+        showToast('❌ โหลดข้อมูลล้มเหลว');
+      }
+    }
+
+    // Init
+    window.addEventListener('load', ()=>{
+      setDefaultRange();
+      loadAll();
+      $('#applyRange').addEventListener('click', loadAll);
+    });
+  </script>
+</body>
+</html>
