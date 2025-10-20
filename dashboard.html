@@ -84,7 +84,7 @@
   <header>
     <div>
       <div class="brand">Lightpole Dashboard</div>
-      <div class="subtle">สถิติไฟติด-ไฟดับ เพื่อวางแผนซ่อมบำรุง</div>
+      <div class="subtle">สถิติไฟติด-ไฟดับ (คำนวณเฉพาะ “เสาไฟที่ไม่ใช่ SP/HM”)</div>
     </div>
     <div class="subtle"><a href="./">🔙 ไปหน้าแผนที่</a></div>
   </header>
@@ -100,44 +100,43 @@
           <button id="applyRange">ดูสถิติช่วงนี้</button>
         </div>
       </div>
-      <div class="subtle">* ช่วงวันที่ใช้กับ “กราฟไฟดับ/วัน” และ “Top เสาที่ดับบ่อย”</div>
+      <div class="subtle">* ใช้ช่วงวันที่กับ “กราฟไฟดับ/วัน” และ “Top เสาที่ดับบ่อย”</div>
     </div>
 
     <!-- Summary cards -->
     <div class="cards" id="cards">
-      <div class="card"><div class="k">เสาทั้งหมด</div><div class="v" id="totalPoles">-</div></div>
+      <div class="card"><div class="k">เสาไฟ (ไม่รวม SP/HM)</div><div class="v" id="totalPoles">-</div></div>
       <div class="card"><div class="k">ไฟติด (ปัจจุบัน)</div><div class="v ok" id="onCount">-</div></div>
       <div class="card"><div class="k">ไฟดับ (ปัจจุบัน)</div><div class="v warn" id="offCount">-</div></div>
-      <div class="card"><div class="k">ชนิด: SP / HM / อื่น</div><div class="v" id="typeCounts">-</div></div>
+      <div class="card"><div class="k">ข้อมูลที่ใช้คำนวณ</div><div class="v" id="typeCounts">-</div></div>
     </div>
 
     <div class="grid">
       <!-- Left column -->
       <div class="panel">
         <h3>กราฟจำนวน “ไฟดับ” รายวัน</h3>
-        <div class="subtle">จาก Log การเปลี่ยนสถานะในช่วงวันที่เลือก</div>
+        <div class="subtle">จาก Log การเปลี่ยนสถานะในช่วงวันที่เลือก (ตัด SP/HM ออกแล้ว)</div>
         <canvas id="dailyOffChart"></canvas>
       </div>
 
       <!-- Right column -->
       <div class="panel">
-        <h3>สัดส่วนสถานะปัจจุบัน</h3>
-        <div class="subtle">นับจากแท็บข้อมูลหลัก (ปัจจุบัน)</div>
+        <h3>สัดส่วนสถานะปัจจุบัน (ไม่รวม SP/HM)</h3>
         <canvas id="currentPie"></canvas>
       </div>
     </div>
 
     <div class="panel" style="margin-top:12px">
       <div class="row">
-        <h3 class="grow">Top 10 เสาที่ “ไฟดับ” บ่อยสุด (ช่วงที่เลือก)</h3>
-        <div class="muted">ดูตามจำนวน entry “ไฟดับ” ในแท็บ Logs</div>
+        <h3 class="grow">Top 10 เสาที่ “ไฟดับ” บ่อยสุด (ช่วงที่เลือก, ไม่รวม SP/HM)</h3>
+        <div class="muted">วัดจากจำนวน entry “ไฟดับ” ในแท็บ Logs</div>
       </div>
       <canvas id="topOffBar"></canvas>
     </div>
 
     <div class="panel" style="margin-top:12px">
       <div class="row">
-        <h3 class="grow">บันทึกล่าสุด</h3>
+        <h3 class="grow">บันทึกล่าสุด (เฉพาะไม่ใช่ SP/HM)</h3>
         <div class="muted">50 รายการล่าสุดจากแท็บ Logs</div>
       </div>
       <div style="overflow:auto">
@@ -161,9 +160,9 @@
 
   <script>
     /* ============ CONFIG ============ */
-    const SHEET_ID = "1lOm7yLsXgSEod9A2l0YCerJdiHI2lD0m5JMPqYqmupY";       // <-- 1lOm7yLsXgSEod9A2l0YCerJdiHI2lD0m5JMPqYqmupY ใส่ SHEET ID ของคุณ
-    const MAIN_SHEET_NAME = "sheets1";                // <-- ชื่อแท็บข้อมูลหลัก (ปรับได้)
-    const LOG_SHEET_NAME  = "Logs";                  // <-- ชื่อแท็บ Logs
+    const SHEET_ID = "1lOm7yLsXgSEod9A2l0YCerJdiHI2lD0m5JMPqYqmupY";   // <-- ใส่ SHEET ID ของคุณ
+    const MAIN_SHEET_NAME = "sheets1";            // <-- ชื่อแท็บข้อมูลหลัก
+    const LOG_SHEET_NAME  = "Logs";              // <-- ชื่อแท็บ Logs
 
     const MAIN_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(MAIN_SHEET_NAME)}`;
     const LOG_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(LOG_SHEET_NAME)}`;
@@ -193,7 +192,6 @@
           const [_, Y,M,D,h=0,mn=0,s=0] = m.map(Number);
           return new Date(Y, M, D, h, mn, s);
         }
-        // plain string to Date
         const d = new Date(v);
         return isNaN(d) ? null : d;
       }
@@ -275,7 +273,7 @@
         showToast('⏳ กำลังโหลดข้อมูล…');
         const [main, logs] = await Promise.all([fetchGViz(MAIN_URL), fetchGViz(LOG_URL)]);
 
-        // ===== Main sheet summary =====
+        // ===== Main sheet =====
         const mcols = main.table.cols;
         const mrows = main.table.rows;
         const idx = {
@@ -284,6 +282,7 @@
           lng:    colIndexByLabels(mcols, ['longitude','lng','ลองจิจูด']),
           status: colIndexByLabels(mcols, ['status','สถานะ'])
         };
+
         const items = [];
         for (const r of mrows){
           const name = cell(r, idx.name);
@@ -293,93 +292,91 @@
           items.push({ name, status });
         }
 
-        const totalAll = items.length;
-const sp  = items.filter(x => typeOfPole(x.name,x.status) === 'SP').length;
-const hm  = items.filter(x => typeOfPole(x.name,x.status) === 'HM').length;
-const other = totalAll - sp - hm; // = ทั้งหมดลบ SP ลบ HM
+        // ===== Summary (เฉพาะ OTHER = ไม่ใช่ SP/HM) =====
+        const poleOnly = items.filter(x => typeOfPole(x.name, x.status) === 'OTHER');
 
-// ✅ เสาไฟ (ไม่รวม SP/HM)
-$('#totalPoles').textContent = other.toLocaleString();
+        const total    = poleOnly.length;
+        const onCount  = poleOnly.filter(x => isOn(x.status)).length;
+        const offCount = poleOnly.filter(x => isOff(x.status)).length;
+        const unkCount = total - onCount - offCount;
 
-// คง on/off เดิม (ยังนับทุกประเภท) ตามแดชบอร์ดเดิม
-const onCountAll  = items.filter(x=>isOn(x.status)).length;
-const offCountAll = items.filter(x=>isOff(x.status)).length;
-const unkCountAll = totalAll - onCountAll - offCountAll;
+        // การ์ดสรุป
+        $('#totalPoles').textContent = total.toLocaleString();
+        $('#onCount').textContent    = onCount.toLocaleString();
+        $('#offCount').textContent   = offCount.toLocaleString();
+        $('#typeCounts').textContent = `${total} จุด (ตัด SP/HM ออกแล้ว)`;
 
-$('#onCount').textContent  = onCountAll.toLocaleString();
-$('#offCount').textContent = offCountAll.toLocaleString();
-$('#typeCounts').textContent = `${sp} / ${hm} / ${other}`;
+        // pie เฉพาะ OTHER
+        if (currentPieChart) currentPieChart.destroy();
+        currentPieChart = makePie($('#currentPie'), onCount, offCount, unkCount);
 
-// pie ปัจจุบัน (ถ้าต้องการให้ pie แสดงเฉพาะ “เสาไฟไม่รวม SP/HM” ดูหมายเหตุด้านล่าง)
-if (currentPieChart) currentPieChart.destroy();
-currentPieChart = makePie($('#currentPie'), onCountAll, offCountAll, unkCountAll);
-
-
-        // ===== Logs analytics =====
+        // ===== Logs =====
         const lcols = logs.table.cols;
         const lrows = logs.table.rows;
         const L = {
-          time:      colIndexByLabels(lcols, ['เวลา','time','timestamp']),
+          time:      colIndexByLabels(lcols, ['เวลา','time','timestamp','date','datetime']),
           name:      colIndexByLabels(lcols, ['ชื่อเสา','name']),
           oldStatus: colIndexByLabels(lcols, ['สถานะเดิม','old','oldstatus']),
           newStatus: colIndexByLabels(lcols, ['สถานะใหม่','new','newstatus']),
           editor:    colIndexByLabels(lcols, ['ผู้แก้ไข','ผู้แก้ไขล่าสุด','editor','user'])
         };
 
-        // table last 50
+        // ===== ตาราง “บันทึกล่าสุด” (เฉพาะ OTHER) =====
         const tbody = $('#logTable tbody');
         tbody.innerHTML = '';
-        const latest = [...lrows].slice(-50).reverse();
-        for (const r of latest){
-          const d = parseGVizDate(cell(r, L.time));
-          const name = cell(r, L.name);
-          const oldS = cell(r, L.oldStatus);
-          const newS = cell(r, L.newStatus);
-          const editor = cell(r, L.editor);
+        const logsAll = lrows.map(r => ({
+          d:      parseGVizDate(cell(r, L.time)),
+          name:   cell(r, L.name),
+          oldS:   cell(r, L.oldStatus),
+          newS:   cell(r, L.newStatus),
+          editor: cell(r, L.editor),
+        }))
+        .filter(x => typeOfPole(x.name, x.newS) === 'OTHER')
+        .sort((a,b) => (a.d?.getTime()||0) - (b.d?.getTime()||0));
+
+        const latest = logsAll.slice(-50).reverse();
+        for (const row of latest){
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td>${fmtDate(d)}</td>
-            <td>${name || '-'}</td>
-            <td><span class="badge ${isOff(oldS)?'warn':isOn(oldS)?'ok':''}">${oldS||'-'}</span></td>
-            <td><span class="badge ${isOff(newS)?'warn':isOn(newS)?'ok':''}">${newS||'-'}</span></td>
-            <td>${editor || '-'}</td>
+            <td>${fmtDate(row.d)}</td>
+            <td>${row.name || '-'}</td>
+            <td><span class="badge ${isOff(row.oldS)?'warn':isOn(row.oldS)?'ok':''}">${row.oldS||'-'}</span></td>
+            <td><span class="badge ${isOff(row.newS)?'warn':isOn(row.newS)?'ok':''}">${row.newS||'-'}</span></td>
+            <td>${row.editor || '-'}</td>
           `;
           tbody.appendChild(tr);
         }
 
-        // analytics by selected range
+        // ===== Analytics by selected range (เฉพาะ OTHER) =====
         const { from, to } = getRange();
-
-        // per-day OFF counts
-        const dayMap = new Map(); // key: yyyy-mm-dd, val: count
-        // top poles OFF counts
-        const offByPole = new Map();
+        const dayMap = new Map();   // yyyy-mm-dd -> count OFF
+        const offByPole = new Map();// name -> count OFF
 
         for (const r of lrows){
           const d   = parseGVizDate(cell(r, L.time));
           const nm  = String(cell(r, L.name) || '');
           const nst = String(cell(r, L.newStatus) || '');
           if (!inRange(d, from, to)) continue;
+          if (typeOfPole(nm, nst) !== 'OTHER') continue;
 
           if (isOff(nst)){
             const key = d.toISOString().slice(0,10);
-            dayMap.set(key, (dayMap.get(key)||0)+1);
-            offByPole.set(nm, (offByPole.get(nm)||0)+1);
+            dayMap.set(key, (dayMap.get(key)||0) + 1);
+            offByPole.set(nm, (offByPole.get(nm)||0) + 1);
           }
         }
 
-        // build arrays sorted by day
+        // กราฟเส้น OFF/วัน
         const keys = Array.from(dayMap.keys()).sort();
         const dailyLabels = keys.map(k=>{
           const [y,m,d] = k.split('-').map(Number);
           return new Date(y, m-1, d);
         });
         const dailyCounts = keys.map(k=> dayMap.get(k));
-
         if (dailyOffChart) dailyOffChart.destroy();
         dailyOffChart = makeLine($('#dailyOffChart'), dailyLabels.map(fmtDay), dailyCounts);
 
-        // top off poles (desc)
+        // Top 10 ดับบ่อย
         const top = Array.from(offByPole.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10);
         const topLabels = top.map(([n])=>n);
         const topCounts = top.map(([_,c])=>c);
