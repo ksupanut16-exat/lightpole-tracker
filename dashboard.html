@@ -300,11 +300,10 @@
         const offCount = poleOnly.filter(x => isOff(x.status)).length;
         const unkCount = total - onCount - offCount;
 
-        // การ์ดสรุป
+        // การ์ดสรุป (ค่า ณ ปัจจุบันจากแท็บหลัก)
         $('#totalPoles').textContent = total.toLocaleString();
         $('#onCount').textContent    = onCount.toLocaleString();
         $('#offCount').textContent   = offCount.toLocaleString();
-        $('#typeCounts').textContent = `${total} จุด (ตัด SP/HM ออกแล้ว)`;
 
         // pie เฉพาะ OTHER
         if (currentPieChart) currentPieChart.destroy();
@@ -359,7 +358,7 @@
           if (!inRange(d, from, to)) continue;
           if (typeOfPole(nm, nst) !== 'OTHER') continue;
 
-          if (isOff(nst)){
+        if (isOff(nst)){
             const key = d.toISOString().slice(0,10);
             dayMap.set(key, (dayMap.get(key)||0) + 1);
             offByPole.set(nm, (offByPole.get(nm)||0) + 1);
@@ -375,6 +374,17 @@
         const dailyCounts = keys.map(k=> dayMap.get(k));
         if (dailyOffChart) dailyOffChart.destroy();
         dailyOffChart = makeLine($('#dailyOffChart'), dailyLabels.map(fmtDay), dailyCounts);
+
+        // === สรุปผลจากกราฟรายวัน -> ช่อง "ข้อมูลที่ใช้คำนวณ"
+        const totalOffRange = dailyCounts.reduce((a,b)=> a + b, 0);
+        const avgPerDay = dailyCounts.length ? (totalOffRange / dailyCounts.length) : 0;
+        const maxPerDay = dailyCounts.length ? Math.max(...dailyCounts) : 0;
+        if (dailyCounts.length === 0) {
+          $('#typeCounts').textContent = 'ไม่มีไฟดับในช่วงวันที่เลือก';
+        } else {
+          $('#typeCounts').textContent =
+            `ดับรวมช่วงนี้: ${totalOffRange.toLocaleString()} • เฉลี่ย/วัน: ${avgPerDay.toFixed(1)} • สูงสุด/วัน: ${maxPerDay}`;
+        }
 
         // Top 10 ดับบ่อย
         const top = Array.from(offByPole.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10);
