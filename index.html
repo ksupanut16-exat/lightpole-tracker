@@ -4,17 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Lightpole Tracker (GPS + Filter + Details)</title>
+  <title>GPS Tracker + เสาไฟ (ตัวกรอง + บันทึกสถานะ + แจ้งเตือนใกล้จุด)</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <style>
-    html, body { height: 100%; margin: 0; padding: 0; font-family: "Segoe UI", Tahoma, sans-serif; background: #f5f6fa; }
-    /* แผนที่เต็มจอมือถือ */
-    #map { height: 100dvh; }
-    @supports not (height: 100dvh){ #map { height: 100vh; } }
 
-    /* ขยับปุ่มซูมลง ~50px */
-    .leaflet-top.leaflet-left { top: 50px !important; }
+  <style>
+    html, body { height: 100%; margin: 0; padding: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif; background: #f5f6fa; }
+    #map { height: 100vh; width: 100%; z-index: 1; }
+
+    /* ระยะปุ่มซูมของ Leaflet ให้พ้นกล่องควบคุมบน */
+    .leaflet-top.leaflet-left { top: 70px !important; }
+    @media (max-width: 640px){
+      .leaflet-top.leaflet-left { top: 120px !important; }
+    }
 
     .status-bar {
       position: fixed; bottom: 10px; left: 10px;
@@ -36,18 +39,32 @@
       padding: 5px 8px; font-size: 14px; width: 150px;
     }
 
-    .refresh-btn, .track-btn {
-      position: fixed; top: 15px;
-      background: #007bff; color: #fff; border: none;
+    .refresh-btn {
+      position: fixed; top: 15px; right: 15px;
+      background: #007bff; color: white; border: none;
       padding: 10px 14px; border-radius: 8px;
       font-size: 14px; font-weight: bold; cursor: pointer;
       box-shadow: 0 2px 5px rgba(0,0,0,0.3);
       transition: background 0.2s ease; z-index: 2000;
-      min-height: 40px; min-width: 40px; touch-action: manipulation;
     }
-    .refresh-btn { right: 15px; }
-    .track-btn { left: 15px; background: #28a745; }
+
+    .track-btn {
+      background: #28a745; color: white; border: none;
+      padding: 10px 14px; border-radius: 8px;
+      font-size: 14px; font-weight: bold; cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+      transition: background 0.2s ease;
+    }
     .track-btn.stop { background: #dc3545; }
+
+    .dashboard-btn{
+      background:#0ea5e9; color:#fff; border:none;
+      padding:10px 14px; border-radius:8px;
+      font-size:14px; font-weight:bold; cursor:pointer;
+      box-shadow:0 2px 5px rgba(0,0,0,.3);
+      text-decoration:none; display:inline-flex; align-items:center; gap:6px;
+    }
+    .dashboard-btn:hover{ filter: brightness(1.05); }
 
     .legend {
       position: fixed; bottom: 20px; right: 20px;
@@ -61,7 +78,7 @@
 
     .toast {
       position: fixed; top: 20px; right: 20px;
-      background: #333; color: #fff;
+      background: #333; color: white;
       padding: 12px 20px; border-radius: 6px;
       font-size: 14px; opacity: 0;
       transition: opacity 0.5s, transform 0.3s;
@@ -76,109 +93,72 @@
 
     .leaflet-div-icon { background: transparent !important; border: none !important; box-shadow: none !important; }
 
-    /* controls ซ้ายบน */
+    /* ===== จัดเลย์เอาต์ส่วนบนให้เป็น Grid: ปุ่มซ้าย + แถบฟิลเตอร์ขวา (มือถือแยก 2 แถว) ===== */
     .top-controls{
-      position: fixed; top: 15px; left: 15px;
-      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      position: fixed; top: 12px; left: 12px; right: 12px;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      grid-template-areas: "actions filter";
+      align-items: start;
+      gap: 10px;
       z-index: 2000;
     }
-    .top-controls .track-btn{ position: static !important; left: auto !important; top: auto !important; }
-
-    .filter-bar{
+    .top-actions{
+      grid-area: actions;
+      display: flex; gap: 8px; flex-wrap: nowrap;
+    }
+    .top-controls .track-btn,
+    .top-controls .dashboard-btn{
+      position: static !important; left: auto !important; top: auto !important;
+    }
+    .top-controls .filter-bar{
+      grid-area: filter;
       position: static !important;
       display: flex; align-items: center; gap: 8px;
       background: rgba(255,255,255,0.95);
       padding: 8px 10px; border-radius: 10px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-      flex-wrap: nowrap; white-space: nowrap; overflow-x: auto; max-width: 92vw;
+      flex-wrap: nowrap; white-space: nowrap; overflow-x: auto; width: 100%;
     }
     .filter-bar input {
       border: 1px solid #ccc; border-radius: 6px;
-      padding: 6px 8px; font-size: 13px; width: 150px; flex: 0 0 auto;
+      padding: 6px 8px; font-size: 13px; width: 140px; flex: 0 0 auto;
     }
-    .chip{
+    .chip {
       border: 1px solid #ccc; background: #fff;
       padding: 6px 10px; border-radius: 999px; font-size: 13px; cursor: pointer;
-      user-select: none; flex: 0 0 auto; min-height: 40px; min-width: 40px;
+      user-select: none; flex: 0 0 auto;
     }
-    .chip.active{ background:#111; color:#fff; border-color:#111; }
+    .chip.active { background: #111; color: #fff; border-color: #111; }
 
-    /* popup อ่านง่ายขึ้นนิด */
-    .leaflet-popup-content{ font-size:14px; }
-    .leaflet-popup-content b{ font-size:15px; }
-
-    /* Bottom sheet / side panel */
-    :root{ --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px); }
-    .sheet{
-      position: fixed; left: 0; right: 0; bottom: 0;
-      background: #fff; border-radius: 16px 16px 0 0;
-      box-shadow: 0 -8px 24px rgba(0,0,0,.2);
-      transform: translateY(100%); transition: transform .25s ease;
-      z-index: 4000; max-height: calc(75dvh + var(--safe-bottom)); padding-bottom: var(--safe-bottom);
-    }
-    .sheet.open{ transform: translateY(0); }
-    .sheet.hidden{ display: none; }
-    .sheet-handle{
-      width: 44px; height: 4px; border-radius: 999px;
-      background: #ccc; margin: 10px auto;
-    }
-    .sheet-content{ padding: 8px 16px 16px; overflow: auto; max-height: 70dvh; }
-    .sheet-title{ margin: 0 0 6px 0; font-size: 16px; }
-    .meta-grid{
-      display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px;
-      font-size: 13.5px;
-    }
-    .meta-grid label{ display:block; font-size:12px; opacity:.7; margin-bottom:2px; }
-    .links a{ display:inline-block; margin-right:8px; font-size:13.5px; }
-    .sheet-actions{ display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
-
-    /* จอใหญ่: แสดงเป็น side panel ขวา */
-    @media (min-width: 900px){
-      .sheet{
-        left: auto; right: 16px; bottom: 16px;
-        border-radius: 12px; width: 380px; transform: translateY(0);
+    @media (max-width: 640px){
+      .top-controls{
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "actions"
+          "filter";
+        gap: 8px;
       }
-      .sheet.hidden{ display:none; }
     }
-    /* ปุ่มไปหน้าแดชบอร์ด */
-.dash-btn{
-  background:#6f42c1; /* ม่วงอ่านง่าย */
-  color:#fff; text-decoration:none; border:none;
-  padding:10px 12px; border-radius:8px;
-  font-size:14px; font-weight:bold; cursor:pointer;
-  box-shadow:0 2px 5px rgba(0,0,0,0.3);
-  transition:background .2s ease; display:inline-flex; align-items:center; gap:6px;
-}
-.dash-btn:hover{ background:#5b36a4; }
-
-/* ให้ตำแหน่งอยู่ภายใต้ .top-controls (ไม่ fixed) */
-.top-controls .dash-btn{
-  position:static !important; left:auto !important; top:auto !important;
-}
-
   </style>
 </head>
 <body>
+  <!-- ช่องกรอกชื่อผู้ตรวจ -->
   <div class="user-input">
     <label for="username">👤 ผู้ตรวจ:</label>
     <input type="text" id="username" placeholder="ระบุชื่อผู้ตรวจ" />
   </div>
 
-  <!-- controls ซ้ายบน -->
+  <!-- กล่องควบคุมมุมซ้ายบน: ปุ่ม + ฟิลเตอร์ -->
   <div class="top-controls">
-    <button id="trackBtn" class="track-btn">▶️ เริ่มติดตาม</button>
+    <div class="top-actions">
+      <button id="trackBtn" class="track-btn">▶️ เริ่มติดตาม</button>
+      <a class="dashboard-btn"
+         href="https://ksupanut16-exat.github.io/lightpole-tracker/dashboard.html"
+         target="_blank" rel="noopener">📊 แดชบอร์ด</a>
+    </div>
 
-  <!-- ปุ่มไปหน้าแดชบอร์ด -->
-  <a class="dash-btn"
-     href="https://ksupanut16-exat.github.io/lightpole-tracker/dashboard.html"
-     target="_blank" rel="noopener">
-    📊 แดชบอร์ด
-  </a>
-
-  <div class="filter-bar">
-    <!-- เดิม -->
-
-
+    <div class="filter-bar">
       <input type="text" id="searchInput" placeholder="ค้นหาชื่อเสา…" />
       <button class="chip active" data-type="ALL">ทั้งหมด</button>
       <button class="chip" data-type="POLE">เฉพาะเสาไฟ</button>
@@ -186,11 +166,12 @@
       <button class="chip" data-type="HM">เฉพาะ HM</button>
       <button class="chip" data-type="ON">ไฟติด</button>
       <button class="chip" data-type="OFF">ไฟดับ</button>
-      
     </div>
   </div>
 
+  <!-- ปุ่มรีเฟรช -->
   <button id="refreshBtn" class="refresh-btn">🔄 อัปเดตตอนนี้</button>
+
   <div id="map"></div>
   <div id="status" class="status-bar">🕓 กำลังโหลดแผนที่...</div>
 
@@ -204,558 +185,362 @@
 
   <div id="toast" class="toast"></div>
 
-  <!-- เสียง -->
+  <!-- เสียงเตือน -->
   <audio id="ding" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" preload="auto"></audio>
-
-  <!-- Bottom Sheet / Side Panel -->
-  <div id="detailsSheet" class="sheet hidden" aria-hidden="true">
-    <div class="sheet-handle" role="button" id="sheetClose" title="ปิด"></div>
-    <div class="sheet-content">
-      <h3 id="dName" class="sheet-title">-</h3>
-
-      <div class="meta-grid">
-        <div><label>รายการ</label><div id="dItem">-</div></div>
-        <div><label>ผู้ซ่อม</label><div id="dMechanic">-</div></div>
-        <div><label>การซ่อมล่าสุด</label><div id="dLastFix">-</div></div>
-        <div><label>ทิศทาง</label><div id="dDirection">-</div></div>
-        <div><label>ผู้แก้ไขล่าสุด</label><div id="dLastEditor">-</div></div>
-        <div><label>อัปเดตล่าสุด</label><div id="dLastUpdated">-</div></div>
-        <div id="dLinks" class="links"></div>
-      </div>
-
-      <div class="sheet-actions">
-        <button id="dOnA"  class="btn btn-green">ไฟติด A</button>
-        <button id="dOnB"  class="btn btn-green">ไฟติด B</button>
-        <button id="dOnAB" class="btn btn-green">ไฟติด AB</button>
-        <button id="dOffA" class="btn btn-red">ไฟดับ A</button>
-        <button id="dOffB" class="btn btn-red">ไฟดับ B</button>
-        <button id="dOffAB"class="btn btn-red">ไฟดับ AB</button>
-      </div>
-    </div>
-  </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
     /* ===== CONFIG ===== */
-    const SHEET_ID = "1lOm7yLsXgSEod9A2l0YCerJdiHI2lD0m5JMPqYqmupY"; // ของคุณ
-    const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`;
-    // 👉 ใส่ URL Apps Script Web App ของคุณ (ลงท้าย /exec)
-    const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzgw0Qs5-MvsolZD4ncD4tzixdVQ4kYHraDIZQOgs_V5cqMYgQ647-2RmFoxBj4NV160g/exec";
+    const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzgw0Qs5-MvsolZD4ncD4tzixdVQ4kYHraDIZQOgs_V5cqMYgQ647-2RmFoxBj4NV160g/exec"; // Apps Script Web App URL
     const PROXY = "https://corsproxy.io/?";
+    const SHEET_ID = "1lOm7yLsXgSEod9A2l0YCerJdiHI2lD0m5JMPqYqmupY";
+    const SHEET_URL =
+      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`;
 
     /* ===== TUNING ===== */
-    const MIN_STEP_M = 2;
-    const NEAR_CHECK_MS = 3000;
-    const ACCURACY_TRIGGER_MAX_M = 30;
-    const ZOOM_IN_DIST_M = 5;
-    const ZOOM_OUT_DIST_M = 10;
-    const PER_PIN_COOLDOWN_MS = 90_000;
-    const GLOBAL_COOLDOWN_MS  = 6_000;
+    const MIN_STEP_M = 2;               // เพิ่มจุดลงเส้นเมื่อขยับ >= 2 ม.
+    const NEAR_CHECK_MS = 3000;         // เช็คใกล้หมุดทุก 3 วิ
+    const ACCURACY_TRIGGER_MAX_M = 30;  // ความแม่นยำเกิน 30 ม. ไม่เตือน
+    const ZOOM_IN_DIST_M = 5;           // ใกล้หมุด <= 5 ม. → ซูม & popup
+    const ZOOM_OUT_DIST_M = 10;         // ห่าง >= 10 ม. → ยกเลิกสถานะซูม
+    const PER_PIN_COOLDOWN_MS = 90_000; // คูลดาวน์รายหมุด
+    const GLOBAL_COOLDOWN_MS  = 6_000;  // คูลดาวน์รวม
     const AUTO_FIT_ON_REFRESH_WHEN_NOT_TRACKING = true;
 
-    window.onload = () => {
-      const map = L.map('map', { preferCanvas: true, maxZoom: 22 })
-                   .setView([13.736717, 100.523186], 13);
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 22,
-        maxNativeZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
-
+    /* ===== Helpers: แปลงค่า/ชื่อ/โค้ด ===== */
+    function showToast(msg, type="info") {
       const toast = document.getElementById("toast");
-      const ding = document.getElementById("ding");
-      const usernameInput = document.getElementById("username");
-      const statusEl = document.getElementById("status");
-      const trackBtn = document.getElementById("trackBtn");
-      const refreshBtn = document.getElementById("refreshBtn");
-
-      // Bottom sheet refs
-      const sheetEl = document.getElementById("detailsSheet");
-      const sheetClose = document.getElementById("sheetClose");
-      const dName = document.getElementById("dName");
-      const dItem = document.getElementById("dItem");
-      const dMechanic = document.getElementById("dMechanic");
-      const dLastFix = document.getElementById("dLastFix");
-      const dDirection = document.getElementById("dDirection");
-      const dLastEditor = document.getElementById("dLastEditor");
-      const dLastUpdated = document.getElementById("dLastUpdated");
-      const dLinks = document.getElementById("dLinks");
-
-      /* === FILTER refs/state === */
-      const searchInput = document.getElementById("searchInput");
-      const chipButtons = Array.from(document.querySelectorAll(".chip"));
-      let activeTypeFilter = "ALL"; // ALL | SP | HM | ON | OFF | POLE
-      let searchQuery = "";
-
-      let markers = [];
-      let markerByName = new Map();
-      let userMarker = null, userCircle = null;
-      let userPath = [];
-      let userPolyline = null;
-      let watchID = null;
-      let isZoomedIn = false;
-      let firstDataLoaded = false;
-
-      // throttling & cooldown
-      let lastNearCheckAt = 0;
-      let lastGlobalNotifyAt = 0;
-      const perPinNotifiedAt = new Map(); // name -> timestamp
-
-      /* ===== Helpers ===== */
-      function showToast(msg, type="info") {
-        toast.textContent = msg;
-        toast.style.background = type === "success" ? "#28a745" : type === "error" ? "#dc3545" : "#333";
-        toast.classList.add("show");
-        setTimeout(() => toast.classList.remove("show"), 3000);
+      toast.textContent = msg;
+      toast.style.background = type === "success" ? "#28a745" :
+                               type === "error" ? "#dc3545" : "#333";
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), 3000);
+    }
+    function toNumber(x) {
+      if (typeof x === "number") return x;
+      if (typeof x === "string") {
+        const cleaned = x.trim().replace(/,/g, ".").replace(/[^\d.\-]/g, "");
+        const n = Number(cleaned);
+        return Number.isFinite(n) ? n : NaN;
       }
-      function toNumber(x) {
-        if (typeof x === "number") return x;
-        if (typeof x === "string") {
-          const cleaned = x.trim().replace(/,/g, ".").replace(/[^\d.\-]/g, "");
-          const n = Number(cleaned);
-          return Number.isFinite(n) ? n : NaN;
-        }
-        return NaN;
-      }
-      function toText(x) { return (x ?? "").toString().trim(); }
+      return NaN;
+    }
+    function toText(x) { return (x ?? "").toString().trim(); }
 
-      function getCodePrefix(x){
-        const s = (x ?? "").toString().trim().toUpperCase();
-        if (!s) return null;
-        let m = s.match(/^(SP|HM)\b/);
-        if (m) return m[1];
-        m = s.match(/\b(SP|HM)\s*[- ]?\s*\d+/);
-        return m ? m[1] : null;
-      }
-      function isSP(x){ return getCodePrefix(x) === "SP"; }
-      function isHM(x){ return getCodePrefix(x) === "HM"; }
+    // ดึงโค้ดเสา (SP/HM/SO + ตัวเลข) จากสตริง
+    function extractCode(str) {
+      const s = (str ?? "").toString().trim();
+      if (!s) return null;
+      const m = s.toUpperCase().match(/\b(SP|HM|SO)\s*[- ]?\s*0*(\d{1,4})\b/);
+      return m ? `${m[1]}${m[2]}` : null;
+    }
+    function deriveName(nameRaw, statusRaw) {
+      const nameTxt = (nameRaw ?? "").toString().trim();
+      if (nameTxt) return nameTxt;
+      const codeFromStatus = extractCode(statusRaw);
+      return codeFromStatus || "";
+    }
+    function getCodePrefix(x){
+      const s = (x ?? "").toString().trim().toUpperCase();
+      if (!s) return null;
+      let m = s.match(/^(SP|HM)\b/);
+      if (m) return m[1];
+      m = s.match(/\b(SP|HM)\s*[- ]?\s*\d+/);
+      return m ? m[1] : null;
+    }
+    function isSP(x){ return getCodePrefix(x) === "SP"; }
+    function isHM(x){ return getCodePrefix(x) === "HM"; }
 
-      function colorFor(status, name) {
-        const s = toText(status), nm = toText(name);
-        if (/ไฟดับ/i.test(s)) return "red";
-        if (/ไฟติด/i.test(s)) return "green";
-        if (/^SP/i.test(nm) || /^SP/i.test(s)) return "#ff66b2";
-        if (/^HM/i.test(nm) || /^HM/i.test(s)) return "#ffd54f";
-        return "blue";
-      }
-
-      function circleIcon(color) {
-        return L.divIcon({
-          html: `<div style="background:${color};width:18px;height:18px;border-radius:50%;border:2px solid white;"></div>`,
-          className: ""
-        });
-      }
-
-      // columns helpers
-      function colIndexByLabels(cols, candidates){
-        return cols.findIndex(c => {
-          const label = (c?.label ?? "").toString().trim().toLowerCase();
-          return candidates.some(x => label === x.toLowerCase());
-        });
-      }
-      function cell(r, idx){ return r?.c?.[idx]?.v ?? r?.c?.[idx]?.f ?? ""; }
-
-      // popup + ข้อมูลเสริม + ปุ่ม "รายละเอียด"
-      function createPopup(marker, name, status, color) {
-        const m = marker.options.meta || {};
-        function escapeHtml(s){
-          return String(s ?? "").replace(/[&<>"]/g, c => (
-            { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]
-          ));
-        }
-        function line(label, value) {
-          const v = (value ?? "").toString().trim();
-          return v ? `<div><small style="opacity:.7">${label}:</small> ${escapeHtml(v)}</div>` : "";
-        }
-        function link(label, url, emoji) {
-          const u = (url ?? "").toString().trim();
-          return u ? `<div>${emoji || "🔗"} <a href="${u}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a></div>` : "";
-        }
-        const extraHtml = `
-          <div id="extraBox" style="margin-top:8px;font-size:12.5px;line-height:1.5">
-            ${line("รายการ", m.item)}
-            ${line("ผู้ซ่อม", m.mechanic)}
-            ${line("การซ่อมล่าสุด", m.lastFix)}
-            ${line("ทิศทาง", m.direction)}
-            ${line("ผู้แก้ไขล่าสุด", m.lastEditor)}
-            ${line("วันที่อัปเดตล่าสุด", m.lastUpdated)}
-            ${link("รูปถ่ายหน้างาน", m.photo, "📷")}
-            ${link("ใบแจ้งงาน", m.ticket, "📄")}
-          </div>
-        `;
-        const div = document.createElement("div");
-        div.innerHTML = `
-          <b>${escapeHtml(name)}</b><br>
-          🔰 <b id="statusText" style="color:${color}">${escapeHtml(status || "-")}</b><br><br>
-
-          <div class="btn-row">
-            <button class="btn btn-green" id="onA">ไฟติด A</button>
-            <button class="btn btn-green" id="onB">ไฟติด B</button>
-            <button class="btn btn-green" id="onAB">ไฟติด AB</button>
-            <button class="btn btn-red"   id="offA">ไฟดับ A</button>
-            <button class="btn btn-red"   id="offB">ไฟดับ B</button>
-            <button class="btn btn-red"   id="offAB">ไฟดับ AB</button>
-            <button class="btn" id="moreDetail">ℹ️ รายละเอียด</button>
-          </div>
-
-          ${extraHtml}
-        `;
-        const popup = L.popup().setContent(div);
-        marker.bindPopup(popup);
-
-        marker.on("popupopen", () => {
-          const statusTextEl = div.querySelector("#statusText");
-          function updateStatus(newStatus) {
-            const newColor = colorFor(newStatus, name);
-            statusTextEl.style.color = newColor;
-            statusTextEl.textContent = newStatus;
-            marker.setIcon(circleIcon(newColor));
-            marker.options.status = newStatus;
-
-            // อัปเดต meta เพื่อ UX (ชีตจะเขียนจริงทาง Apps Script)
-            const editor = (usernameInput?.value || "").trim() || "ไม่ระบุผู้ตรวจ";
-            marker.options.meta = marker.options.meta || {};
-            marker.options.meta.lastEditor = editor;
-            marker.options.meta.lastUpdated = new Date().toLocaleString();
-
-            ding.currentTime = 0; ding.play();
-            sendStatusToSheet(name, newStatus);
-            marker.closePopup();
-            applyFilters();
-          }
-          div.querySelector("#onA").onclick  = () => updateStatus("ไฟติดA");
-          div.querySelector("#onB").onclick  = () => updateStatus("ไฟติดB");
-          div.querySelector("#onAB").onclick = () => updateStatus("ไฟติดAB");
-          div.querySelector("#offA").onclick = () => updateStatus("ไฟดับA");
-          div.querySelector("#offB").onclick = () => updateStatus("ไฟดับB");
-          div.querySelector("#offAB").onclick= () => updateStatus("ไฟดับAB");
-
-          div.querySelector("#moreDetail").onclick = () => openSheetFor(marker);
-        });
-      }
-
-      // ส่งอัปเดตแบบกันพลาด (proxy ล่มก็สำเร็จได้)
-      async function sendStatusToSheet(name, newStatus) {
-        const user = usernameInput.value.trim() || "ไม่ระบุผู้ตรวจ";
-        const payload = { name, status: newStatus, user };
-        const proxyUrl = PROXY + encodeURIComponent(WEBHOOK_URL) + "&_ts=" + Date.now();
-
-        async function tryProxy() {
-          const r = await fetch(proxyUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-            body: JSON.stringify(payload),
-            cache: "no-store",
-          });
-          if (!r.ok) throw new Error("proxy " + r.status);
-          const j = await r.json();
-          if (!j.ok) throw new Error(j.error || "script error");
-        }
-        async function tryDirectNoCors() {
-          await fetch(WEBHOOK_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-            mode: "no-cors",
-            cache: "no-store",
-          });
-        }
-
-        try {
-          await tryProxy();
-          showToast(`✅ บันทึก "${newStatus}" แล้ว (${name})`, "success");
-        } catch (e) {
-          console.warn("Proxy ส่งไม่สำเร็จ:", e);
-          try {
-            await tryDirectNoCors();
-            await new Promise(res => setTimeout(res, 900)); // รอให้ GAS เขียนชีต
-            await loadSheetData(); // โหลดซ้ำมายืนยัน
-            const m = markerByName.get(name);
-            if (m && (m.options.status || "") === newStatus) {
-              showToast(`✅ บันทึกแล้ว (${name})`, "success");
-            } else {
-              throw new Error("verify-failed");
-            }
-          } catch (e2) {
-            console.error("Direct fallback failed:", e2);
-            showToast("❌ บันทึกล้มเหลว (เครือข่าย/Proxy): ลองอีกครั้ง", "error");
-          }
-        }
-      }
-
-      // โหลดชีต + สร้างหมุด
-      async function loadSheetData() {
-        try {
-          const res = await fetch(SHEET_URL, { cache: "no-store" });
-          const text = await res.text();
-
-          // ล้าง markers เก่าทั้งหมด
-          markers.forEach(m => map.removeLayer(m));
-          markers = [];
-          markerByName.clear();
-
-          const json = JSON.parse(text.substring(47).slice(0, -2));
-          const rows = json.table.rows;
-          const cols = json.table.cols;
-
-          // map คอลัมน์ตามชีตที่คุณใช้
-          const COL = {
-            name:        colIndexByLabels(cols, ["name","ชื่อ","ชื่อเสา"]),
-            lat:         colIndexByLabels(cols, ["latitude","lat","ละติจูด"]),
-            lng:         colIndexByLabels(cols, ["longitude","lng","ลองจิจูด"]),
-            lastFix:     colIndexByLabels(cols, ["การซ่อมล่าสุด"]),
-            item:        colIndexByLabels(cols, ["รายการ"]),
-            mechanic:    colIndexByLabels(cols, ["ผู้ซ่อม"]),
-            photo:       colIndexByLabels(cols, ["รูปถ่ายหน้างาน","รูปถ่าย"]),
-            ticket:      colIndexByLabels(cols, ["ใบแจ้งงาน"]),
-            status:      colIndexByLabels(cols, ["status","สถานะ"]),
-            lastEditor:  colIndexByLabels(cols, ["ผู้แก้ไขล่าสุด"]),
-            lastUpdated: colIndexByLabels(cols, ["วันที่อัปเดตล่าสุด","อัปเดตล่าสุด"]),
-            direction:   colIndexByLabels(cols, ["ทิศทาง","ทิศ"])
-          };
-          // fallback ขั้นต่ำสำหรับ 3 คอลัมน์หลัก + status
-          if (COL.name   < 0) COL.name = 0;
-          if (COL.lat    < 0) COL.lat = 1;
-          if (COL.lng    < 0) COL.lng = 2;
-          if (COL.status < 0) COL.status = 8;
-
-          rows.forEach((r, i) => {
-            const rawName   = cell(r, COL.name);
-            const rawLat    = cell(r, COL.lat);
-            const rawLng    = cell(r, COL.lng);
-            const rawStatus = cell(r, COL.status);
-
-            const name   = toText(rawName);
-            const status = toText(rawStatus);
-            const latNum = toNumber(rawLat);
-            const lngNum = toNumber(rawLng);
-            if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return;
-
-            const meta = {
-              lastFix:     cell(r, COL.lastFix),
-              item:        cell(r, COL.item),
-              mechanic:    cell(r, COL.mechanic),
-              photo:       cell(r, COL.photo),
-              ticket:      cell(r, COL.ticket),
-              lastEditor:  cell(r, COL.lastEditor),
-              lastUpdated: cell(r, COL.lastUpdated),
-              direction:   cell(r, COL.direction),
-            };
-
-            const color = colorFor(status, name);
-            const m = L.marker([latNum, lngNum], {
-              icon: circleIcon(color),
-              name,
-              status,
-              meta
-            }).addTo(map);
-
-            createPopup(m, name, status, color);
-            markers.push(m);
-            markerByName.set(name || `row_${i}`, m);
-          });
-
-          if (markers.length && (!firstDataLoaded || (AUTO_FIT_ON_REFRESH_WHEN_NOT_TRACKING && !watchID))) {
-            map.fitBounds(L.featureGroup(markers).getBounds().pad(0.2));
-            firstDataLoaded = true;
-          }
-
-          statusEl.innerHTML = "✅ อัปเดตล่าสุด: " + new Date().toLocaleTimeString();
-          applyFilters();
-        } catch (e) {
-          console.error(e);
-          statusEl.textContent = "❌ โหลดข้อมูลไม่สำเร็จ";
-        }
-      }
-
-      // Bottom sheet logic
-      function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
-      function fill(el, v){ el.innerHTML = (v && String(v).trim()) ? esc(v) : "<span style='opacity:.6'>-</span>"; }
-      let sheetMarker = null;
-      function openSheetFor(marker){
-        sheetMarker = marker;
-        const m = marker.options;
-        const meta = m.meta || {};
-        dName.textContent = m.name || "-";
-        fill(dItem, meta.item);
-        fill(dMechanic, meta.mechanic);
-        fill(dLastFix, meta.lastFix);
-        fill(dDirection, meta.direction);
-        fill(dLastEditor, meta.lastEditor);
-        fill(dLastUpdated, meta.lastUpdated);
-        dLinks.innerHTML = "";
-        if (meta.photo)  dLinks.innerHTML += `📷 <a href="${esc(meta.photo)}" target="_blank" rel="noopener">รูปถ่าย</a> `;
-        if (meta.ticket) dLinks.innerHTML += `📄 <a href="${esc(meta.ticket)}" target="_blank" rel="noopener">ใบแจ้งงาน</a> `;
-
-        sheetEl.classList.remove("hidden");
-        requestAnimationFrame(()=> sheetEl.classList.add("open"));
-      }
-      function closeSheet(){
-        sheetEl.classList.remove("open");
-        setTimeout(()=> sheetEl.classList.add("hidden"), 200);
-      }
-      sheetClose.addEventListener("click", closeSheet);
-      sheetEl.addEventListener("click", (e)=>{ if(e.target===sheetEl) closeSheet(); });
-
-      ["dOnA","dOnB","dOnAB","dOffA","dOffB","dOffAB"].forEach(id=>{
-        document.getElementById(id).addEventListener("click", ()=>{
-          if(!sheetMarker) return;
-          const name = sheetMarker.options.name;
-          const mapStatus = {
-            dOnA:"ไฟติดA", dOnB:"ไฟติดB", dOnAB:"ไฟติดAB",
-            dOffA:"ไฟดับA", dOffB:"ไฟดับB", dOffAB:"ไฟดับAB"
-          };
-          const newStatus = mapStatus[id];
-          const newColor = colorFor(newStatus, name);
-          sheetMarker.setIcon(circleIcon(newColor));
-          sheetMarker.options.status = newStatus;
-
-          const editor = (usernameInput?.value || "").trim() || "ไม่ระบุผู้ตรวจ";
-          sheetMarker.options.meta = sheetMarker.options.meta || {};
-          sheetMarker.options.meta.lastEditor = editor;
-          sheetMarker.options.meta.lastUpdated = new Date().toLocaleString();
-
-          sendStatusToSheet(name, newStatus);
-          applyFilters();
-          showToast(`✅ บันทึก "${newStatus}" แล้ว (${name})`, "success");
-        });
+    // สีของหมุด (สถานะ > ชื่อ)
+    function colorFor(status, name) {
+      const s = toText(status);
+      const nm = toText(name);
+      if (/^SP/i.test(s) || /^SP/i.test(nm)) return "#ff66b2"; // ชมพู
+      if (/^HM/i.test(s) || /^HM/i.test(nm)) return "#ffd54f"; // เหลือง
+      if (/ไฟดับ/i.test(s)) return "red";
+      if (/ไฟติด/i.test(s)) return "green";
+      return "blue";
+    }
+    function circleIcon(color) {
+      return L.divIcon({
+        html: `<div style="background:${color};width:18px;height:18px;border-radius:50%;border:2px solid white;"></div>`,
+        className: ""
       });
+    }
 
-      // ติดตามตำแหน่ง
-      function startTracking() {
-        if (watchID) return;
-        showToast("🚀 เริ่มติดตามตำแหน่ง...", "success");
-        trackBtn.textContent = "⏸️ หยุดติดตาม";
-        trackBtn.classList.add("stop");
+    function sendStatusToSheet(name, newStatus) {
+      const fullURL = PROXY + encodeURIComponent(WEBHOOK_URL);
+      const user = (document.getElementById("username").value || "ไม่ระบุผู้ตรวจ").trim();
+      fetch(fullURL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, status: newStatus, user })
+      })
+      .then(r => {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json().catch(()=> ({}));
+      })
+      .then(() => showToast(`✅ บันทึก "${newStatus}" แล้ว (${name})`, "success"))
+      .catch(e => { console.error(e); showToast("❌ บันทึกล้มเหลว!", "error"); });
+    }
 
-        if (document.documentElement.requestFullscreen) {
-          document.documentElement.requestFullscreen().catch(() => {});
+    function createPopup(marker, name, status, color) {
+      const ding = document.getElementById("ding");
+      const div = document.createElement("div");
+      div.innerHTML = `
+        <b>${name}</b><br>
+        🔰 <b id="statusText" style="color:${color}">${status || "-"}</b><br><br>
+        <div class="btn-row">
+          <button class="btn btn-green" id="onA">ไฟติด A</button>
+          <button class="btn btn-green" id="onB">ไฟติด B</button>
+          <button class="btn btn-green" id="onAB">ไฟติด AB</button>
+          <button class="btn btn-red"   id="offA">ไฟดับ A</button>
+          <button class="btn btn-red"   id="offB">ไฟดับ B</button>
+          <button class="btn btn-red"   id="offAB">ไฟดับ AB</button>
+        </div>
+      `;
+      const popup = L.popup().setContent(div);
+      marker.bindPopup(popup);
+
+      marker.on("popupopen", () => {
+        const statusTextEl = div.querySelector("#statusText");
+        function updateStatus(newStatus) {
+          const newColor = colorFor(newStatus, name);
+          statusTextEl.style.color = newColor;
+          statusTextEl.textContent = newStatus;
+          marker.setIcon(circleIcon(newColor));
+          marker.options.status = newStatus;  // อัปเดตสถานะในตัว marker (ใช้กรอง)
+          ding.currentTime = 0; ding.play();
+          marker.closePopup();
+          sendStatusToSheet(name, newStatus);
+          applyFilters(); // รีเฟรชผลกรองเมื่อสถานะเปลี่ยน
         }
+        div.querySelector("#onA").onclick  = () => updateStatus("ไฟติดA");
+        div.querySelector("#onB").onclick  = () => updateStatus("ไฟติดB");
+        div.querySelector("#onAB").onclick = () => updateStatus("ไฟติดAB");
+        div.querySelector("#offA").onclick = () => updateStatus("ไฟดับA");
+        div.querySelector("#offB").onclick = () => updateStatus("ไฟดับB");
+        div.querySelector("#offAB").onclick= () => updateStatus("ไฟดับAB");
+      });
+    }
 
-        watchID = navigator.geolocation.watchPosition(onPosition, onPositionError, {
-          enableHighAccuracy: true,
-          maximumAge: 0,
-          timeout: 10000
+    // ตัวแปรหลัก
+    let map, markers = [], markerByName = new Map();
+    let userMarker = null, userCircle = null;
+    let userPath = [], userPolyline = null;
+    let watchID = null, isZoomedIn = false, firstDataLoaded = false;
+
+    // สำหรับ throttling & cooldown
+    let lastNearCheckAt = 0;
+    let lastGlobalNotifyAt = 0;
+    const perPinNotifiedAt = new Map(); // name -> timestamp
+
+    // ฟิลเตอร์
+    let activeTypeFilter = "ALL"; // ALL | POLE | SP | HM | ON | OFF
+    let searchQuery = "";
+
+    // อิลิเมนต์อ้างอิง
+    let statusEl, trackBtn, refreshBtn, searchInput, chipButtons;
+
+    async function loadSheetData() {
+      try {
+        const res = await fetch(SHEET_URL, { cache: "no-store" });
+        const text = await res.text();
+
+        // ล้าง markers เก่า
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+        markerByName.clear();
+
+        const json = JSON.parse(text.substring(47).slice(0, -2));
+        const rows = json.table.rows;
+
+        rows.forEach((r, i) => {
+          // ปรับ index ตามคอลัมน์จริงในชีตของคุณ
+          const rawName   = r.c[0]?.v ?? r.c[0]?.f;   // Name
+          const rawLat    = r.c[1]?.v ?? r.c[1]?.f;   // Latitude
+          const rawLng    = r.c[2]?.v ?? r.c[2]?.f;   // Longitude
+          const rawStatus = r.c[8]?.v ?? r.c[8]?.f;   // Status
+
+          const latNum = toNumber(rawLat);
+          const lngNum = toNumber(rawLng);
+          if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return;
+
+          const name   = deriveName(rawName, rawStatus);
+          const status = toText(rawStatus);
+          const color = colorFor(status, name);
+
+          const m = L.marker([latNum, lngNum], {
+            icon: circleIcon(color),
+            name,
+            status
+          }).addTo(map);
+
+          createPopup(m, name, status, color);
+          markers.push(m);
+          markerByName.set(name || `row_${i}`, m);
         });
-      }
-      function stopTracking() {
-        if (!watchID) return;
-        navigator.geolocation.clearWatch(watchID);
-        watchID = null;
-        trackBtn.textContent = "▶️ เริ่มติดตาม";
-        trackBtn.classList.remove("stop");
-        showToast("🛑 หยุดติดตามแล้ว", "info");
 
-        if (document.fullscreenElement) {
-          document.exitFullscreen().catch(() => {});
+        if (markers.length && (!firstDataLoaded ||
+            (AUTO_FIT_ON_REFRESH_WHEN_NOT_TRACKING && !watchID))) {
+          map.fitBounds(L.featureGroup(markers).getBounds().pad(0.2));
+          firstDataLoaded = true;
         }
+
+        statusEl.innerHTML = "✅ อัปเดตล่าสุด: " + new Date().toLocaleTimeString();
+        applyFilters(); // ใช้ฟิลเตอร์กับข้อมูลที่โหลดล่าสุด
+      } catch (e) {
+        console.error(e);
+        statusEl.textContent = "❌ โหลดข้อมูลไม่สำเร็จ";
       }
+    }
+
+    function startTracking() {
+      if (watchID) return;
+      showToast("🚀 เริ่มติดตามตำแหน่ง...", "success");
+      trackBtn.textContent = "⏸️ หยุดติดตาม";
+      trackBtn.classList.add("stop");
+
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+
+      watchID = navigator.geolocation.watchPosition(onPosition, onPositionError, {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 10000
+      });
+    }
+    function stopTracking() {
+      if (!watchID) return;
+      navigator.geolocation.clearWatch(watchID);
+      watchID = null;
+      trackBtn.textContent = "▶️ เริ่มติดตาม";
+      trackBtn.classList.remove("stop");
+      showToast("🛑 หยุดติดตามแล้ว", "info");
+
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    function onPosition(pos) {
+      const { latitude, longitude, accuracy } = pos.coords;
+      const now = Date.now();
+
+      // อัปเดตตำแหน่งผู้ใช้
+      if (userMarker) map.removeLayer(userMarker);
+      if (userCircle) map.removeLayer(userCircle);
+      userMarker = L.marker([latitude, longitude], { icon: L.divIcon({ html: "📍" }) }).addTo(map);
+      userCircle = L.circle([latitude, longitude], { radius: accuracy }).addTo(map);
+
+      // ต่อเส้นทางแบบลดจุดแน่น
+      const newLatLng = L.latLng(latitude, longitude);
+      let addedPoint = false;
+      if (userPath.length === 0) { userPath.push(newLatLng); addedPoint = true; }
+      else {
+        const last = userPath[userPath.length - 1];
+        const moved = map.distance(last, newLatLng);
+        if (moved >= MIN_STEP_M) { userPath.push(newLatLng); addedPoint = true; }
+      }
+      if (userPolyline) { if (addedPoint) userPolyline.addLatLng(newLatLng); }
+      else { userPolyline = L.polyline(userPath, { color: "#007bff", weight: 4 }).addTo(map); }
+
+      // โฟกัสตำแหน่ง
+      map.setView([latitude, longitude], Math.max(map.getZoom(), 17));
+
+      // แสดงพิกัด
+      statusEl.innerHTML =
+        `📍 ${latitude.toFixed(5)}, ${longitude.toFixed(5)} (±${accuracy.toFixed(1)} m)`;
+
+      // เช็คใกล้หมุดแบบ throttle
+      if (now - lastNearCheckAt >= NEAR_CHECK_MS) {
+        lastNearCheckAt = now;
+        checkNearbyMarkers(newLatLng, accuracy, now);
+      }
+    }
+    function onPositionError() {
+      showToast("⚠️ ไม่สามารถระบุตำแหน่งได้!", "error");
+    }
+
+    function checkNearbyMarkers(latlng, accuracy, nowTs) {
+      if (accuracy > ACCURACY_TRIGGER_MAX_M) return;
+
+      let nearest = null, nearestDist = Infinity;
+
+      // คำนวณเฉพาะหมุดที่แสดงอยู่ (หลังกรอง)
+      for (const m of markers) {
+        if (!map.hasLayer(m)) continue;
+        const d = map.distance(latlng, m.getLatLng());
+        if (d < nearestDist) { nearest = m; nearestDist = d; }
+      }
+      if (!nearest) return;
+
+      const name = nearest.options.name || "(ไม่ทราบชื่อ)";
+      const lastPerPin = perPinNotifiedAt.get(name) || 0;
+      const globalOk = (nowTs - lastGlobalNotifyAt) >= GLOBAL_COOLDOWN_MS;
+      const perPinOk  = (nowTs - lastPerPin)        >= PER_PIN_COOLDOWN_MS;
+
+      if (nearestDist <= ZOOM_IN_DIST_M && globalOk && perPinOk && !isZoomedIn) {
+        isZoomedIn = true;
+        perPinNotifiedAt.set(name, nowTs);
+        lastGlobalNotifyAt = nowTs;
+
+        map.setView(nearest.getLatLng(), 19, { animate: true });
+        nearest.openPopup();
+        document.getElementById("ding").play();
+        showToast(`📡 ใกล้จุด ${name} ระยะ ${nearestDist.toFixed(1)} ม.`, "info");
+      }
+      if (nearestDist >= ZOOM_OUT_DIST_M && isZoomedIn) {
+        isZoomedIn = false;
+      }
+    }
+
+    /* ===== ฟิลเตอร์ ===== */
+    function markerPassTypeFilter(m) {
+      const name = (m.options.name || "");
+      const st   = (m.options.status || "");
+
+      switch (activeTypeFilter) {
+        case "SP":   return isSP(name) || isSP(st);
+        case "HM":   return isHM(name) || isHM(st);
+        case "ON":   return /ไฟติด/i.test(st);
+        case "OFF":  return /ไฟดับ/i.test(st);
+        case "POLE": // เฉพาะ “เสาไฟ” = ไม่ใช่ SP/HM
+          return !(isSP(name) || isHM(name) || isSP(st) || isHM(st));
+        default:     return true; // ALL
+      }
+    }
+    function markerPassSearch(m) {
+      if (!searchQuery) return true;
+      const name = (m.options.name || "").toLowerCase();
+      return name.includes(searchQuery);
+    }
+    function applyFilters() {
+      searchQuery = (searchInput?.value || "").trim().toLowerCase();
+      markers.forEach(m => {
+        const shouldShow = markerPassTypeFilter(m) && markerPassSearch(m);
+        if (shouldShow) { if (!map.hasLayer(m)) m.addTo(map); }
+        else { if (map.hasLayer(m)) map.removeLayer(m); }
+      });
+    }
+
+    /* ===== เริ่มทำงาน ===== */
+    window.onload = () => {
+      map = L.map('map').setView([13.736717, 100.523186], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        { maxZoom: 19 }).addTo(map);
+
+      statusEl   = document.getElementById("status");
+      trackBtn   = document.getElementById("trackBtn");
+      refreshBtn = document.getElementById("refreshBtn");
+      searchInput = document.getElementById("searchInput");
+      chipButtons = Array.from(document.querySelectorAll(".chip"));
 
       trackBtn.onclick = () => { if (watchID) stopTracking(); else startTracking(); };
       refreshBtn.onclick = loadSheetData;
 
-      function onPosition(pos) {
-        const { latitude, longitude, accuracy } = pos.coords;
-        const now = Date.now();
-
-        // พรีโหลดเสียงบนมือถือ
-        if ('ontouchstart' in window) {
-          document.addEventListener('touchstart', ()=>{
-            ding.play().then(()=>ding.pause()).catch(()=>{});
-          }, { once:true });
-        }
-
-        if (userMarker) map.removeLayer(userMarker);
-        if (userCircle) map.removeLayer(userCircle);
-        userMarker = L.marker([latitude, longitude], { icon: L.divIcon({ html: "📍" }) }).addTo(map);
-        userCircle = L.circle([latitude, longitude], { radius: accuracy }).addTo(map);
-
-        // ต่อเส้นทางแบบมีเงื่อนไข
-        const newLatLng = L.latLng(latitude, longitude);
-        let addedPoint = false;
-        if (userPath.length === 0) { userPath.push(newLatLng); addedPoint = true; }
-        else {
-          const last = userPath[userPath.length - 1];
-          const moved = map.distance(last, newLatLng);
-          if (moved >= MIN_STEP_M) { userPath.push(newLatLng); addedPoint = true; }
-        }
-        if (userPolyline) { if (addedPoint) userPolyline.addLatLng(newLatLng); }
-        else { userPolyline = L.polyline(userPath, { color: "#007bff", weight: 4 }).addTo(map); }
-
-        // โฟกัสตำแหน่ง
-        map.setView([latitude, longitude], Math.max(map.getZoom(), 17));
-
-        // แสดงพิกัด
-        statusEl.innerHTML = `📍 ${latitude.toFixed(5)}, ${longitude.toFixed(5)} (±${accuracy.toFixed(1)} m)`;
-
-        // เช็คใกล้หมุด (throttle)
-        if (now - lastNearCheckAt >= NEAR_CHECK_MS) {
-          lastNearCheckAt = now;
-          checkNearbyMarkers(newLatLng, accuracy, now);
-        }
-      }
-      function onPositionError() { showToast("⚠️ ไม่สามารถระบุตำแหน่งได้!", "error"); }
-
-      function checkNearbyMarkers(latlng, accuracy, nowTs) {
-        if (accuracy > ACCURACY_TRIGGER_MAX_M) return;
-
-        let nearest = null;
-        let nearestDist = Infinity;
-        // เช็คเฉพาะหมุดที่ถูกแสดงอยู่ (หลังกรอง)
-        for (const m of markers) {
-          if (!map.hasLayer(m)) continue;
-          const d = map.distance(latlng, m.getLatLng());
-          if (d < nearestDist) { nearest = m; nearestDist = d; }
-        }
-        if (!nearest) return;
-
-        const name = nearest.options.name || "(ไม่ทราบชื่อ)";
-        const lastPerPin = perPinNotifiedAt.get(name) || 0;
-        const globalOk = (nowTs - lastGlobalNotifyAt) >= GLOBAL_COOLDOWN_MS;
-        const perPinOk  = (nowTs - lastPerPin)        >= PER_PIN_COOLDOWN_MS;
-
-        if (nearestDist <= ZOOM_IN_DIST_M && globalOk && perPinOk && !isZoomedIn) {
-          isZoomedIn = true;
-          perPinNotifiedAt.set(name, nowTs);
-          lastGlobalNotifyAt = nowTs;
-
-          map.setView(nearest.getLatLng(), 19, { animate: true });
-          nearest.openPopup();
-          ding.currentTime = 0; ding.play();
-          showToast(`📡 ใกล้จุด ${name} ระยะ ${nearestDist.toFixed(1)} ม.`, "info");
-        }
-        if (nearestDist >= ZOOM_OUT_DIST_M && isZoomedIn) { isZoomedIn = false; }
-      }
-
-      // FILTER logic
-      function markerPassTypeFilter(m) {
-        const name = (m.options.name || "");
-        const st   = (m.options.status || "");
-        switch (activeTypeFilter) {
-          case "SP":   return isSP(name) || isSP(st);
-          case "HM":   return isHM(name) || isHM(st);
-          case "ON":   return /ไฟติด/i.test(st);
-          case "OFF":  return /ไฟดับ/i.test(st);
-          case "POLE": // เฉพาะเสาไฟ = ไม่ใช่ SP/HM
-            return !(isSP(name) || isHM(name) || isSP(st) || isHM(st));
-          default:     return true; // ALL
-        }
-      }
-      function markerPassSearch(m) {
-        if (!searchQuery) return true;
-        const name = (m.options.name || "").toLowerCase();
-        return name.includes(searchQuery);
-      }
-      function applyFilters() {
-        searchQuery = (searchInput?.value || "").trim().toLowerCase();
-        markers.forEach(m => {
-          const shouldShow = markerPassTypeFilter(m) && markerPassSearch(m);
-          if (shouldShow) { if (!map.hasLayer(m)) m.addTo(map); }
-          else { if (map.hasLayer(m)) map.removeLayer(m); }
-        });
-      }
       chipButtons.forEach(btn => {
         btn.addEventListener("click", () => {
           activeTypeFilter = btn.dataset.type;
@@ -770,7 +555,7 @@
       loadSheetData();
       setInterval(loadSheetData, 300000);
 
-      // แท็บซ่อน → หยุดติดตาม
+      // ประหยัดแบต/เน็ต: ซ่อนไปให้หยุดติดตาม
       document.addEventListener("visibilitychange", () => {
         if (document.hidden && watchID) stopTracking();
       });
