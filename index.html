@@ -140,6 +140,22 @@
       }
       .sheet.hidden{ display:none; }
     }
+    /* ปุ่มไปหน้าแดชบอร์ด */
+.dash-btn{
+  background:#6f42c1; /* ม่วงอ่านง่าย */
+  color:#fff; text-decoration:none; border:none;
+  padding:10px 12px; border-radius:8px;
+  font-size:14px; font-weight:bold; cursor:pointer;
+  box-shadow:0 2px 5px rgba(0,0,0,0.3);
+  transition:background .2s ease; display:inline-flex; align-items:center; gap:6px;
+}
+.dash-btn:hover{ background:#5b36a4; }
+
+/* ให้ตำแหน่งอยู่ภายใต้ .top-controls (ไม่ fixed) */
+.top-controls .dash-btn{
+  position:static !important; left:auto !important; top:auto !important;
+}
+
   </style>
 </head>
 <body>
@@ -152,6 +168,21 @@
   <div class="top-controls">
     <button id="trackBtn" class="track-btn">▶️ เริ่มติดตาม</button>
     <div class="filter-bar">
+      <div class="top-controls">
+  <button id="trackBtn" class="track-btn">▶️ เริ่มติดตาม</button>
+
+  <!-- ปุ่มไปหน้าแดชบอร์ด -->
+  <a class="dash-btn"
+     href="https://ksupanut16-exat.github.io/lightpole-tracker/dashboard.html"
+     target="_blank" rel="noopener">
+    📊 แดชบอร์ด
+  </a>
+
+  <div class="filter-bar">
+    <!-- เดิม -->
+  </div>
+</div>
+
       <input type="text" id="searchInput" placeholder="ค้นหาชื่อเสา…" />
       <button class="chip active" data-type="ALL">ทั้งหมด</button>
       <button class="chip" data-type="POLE">เฉพาะเสาไฟ</button>
@@ -159,6 +190,7 @@
       <button class="chip" data-type="HM">เฉพาะ HM</button>
       <button class="chip" data-type="ON">ไฟติด</button>
       <button class="chip" data-type="OFF">ไฟดับ</button>
+      
     </div>
   </div>
 
