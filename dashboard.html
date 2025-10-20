@@ -293,22 +293,27 @@
           items.push({ name, status });
         }
 
-        const total = items.length;
-        const onCount  = items.filter(x=>isOn(x.status)).length;
-        const offCount = items.filter(x=>isOff(x.status)).length;
-        const unkCount = total - onCount - offCount;
-        const sp = items.filter(x=>typeOfPole(x.name,x.status)==='SP').length;
-        const hm = items.filter(x=>typeOfPole(x.name,x.status)==='HM').length;
-        const other = total - sp - hm;
+        const totalAll = items.length;
+const sp  = items.filter(x => typeOfPole(x.name,x.status) === 'SP').length;
+const hm  = items.filter(x => typeOfPole(x.name,x.status) === 'HM').length;
+const other = totalAll - sp - hm; // = ทั้งหมดลบ SP ลบ HM
 
-        $('#totalPoles').textContent = total.toLocaleString();
-        $('#onCount').textContent = onCount.toLocaleString();
-        $('#offCount').textContent = offCount.toLocaleString();
-        $('#typeCounts').textContent = `${sp} / ${hm} / ${other}`;
+// ✅ เสาไฟ (ไม่รวม SP/HM)
+$('#totalPoles').textContent = other.toLocaleString();
 
-        // pie
-        if (currentPieChart) currentPieChart.destroy();
-        currentPieChart = makePie($('#currentPie'), onCount, offCount, unkCount);
+// คง on/off เดิม (ยังนับทุกประเภท) ตามแดชบอร์ดเดิม
+const onCountAll  = items.filter(x=>isOn(x.status)).length;
+const offCountAll = items.filter(x=>isOff(x.status)).length;
+const unkCountAll = totalAll - onCountAll - offCountAll;
+
+$('#onCount').textContent  = onCountAll.toLocaleString();
+$('#offCount').textContent = offCountAll.toLocaleString();
+$('#typeCounts').textContent = `${sp} / ${hm} / ${other}`;
+
+// pie ปัจจุบัน (ถ้าต้องการให้ pie แสดงเฉพาะ “เสาไฟไม่รวม SP/HM” ดูหมายเหตุด้านล่าง)
+if (currentPieChart) currentPieChart.destroy();
+currentPieChart = makePie($('#currentPie'), onCountAll, offCountAll, unkCountAll);
+
 
         // ===== Logs analytics =====
         const lcols = logs.table.cols;
