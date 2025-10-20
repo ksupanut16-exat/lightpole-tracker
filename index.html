@@ -192,16 +192,11 @@
 
   <script>
     /* ===== CONFIG ===== */
-    const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzgw0Qs5-MvsolZD4ncD4tzixdVQ4kYHraDIZQOgs_V5cqMYgQ647-2RmFoxBj4NV160g/exec";
+    const WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzgw0Qs5-MvsolZD4ncD4tzixdVQ4kYHraDIZQOgs_V5cqMYgQ647-2RmFoxBj4NV160g/exec"; // Apps Script Web App URL
     const PROXY = "https://corsproxy.io/?";
-
-    // ใช้เพียงตัว ID ของชีต (ดึงจาก URL ที่ให้มา)
-    const SHEET_ID = "1LgTGHbgIkHEkH53qkzrNc0haIt5RV5eYydtN7Qm7bcQ";
-    const SHEET_NAME = "sheets1";
-
-    // เพิ่ม &sheet= ให้แน่ใจว่าอ่านแท็บที่ระบุ
+    const SHEET_ID = "1lOm7yLsXgSEod9A2l0YCerJdiHI2lD0m5JMPqYqmupY";
     const SHEET_URL =
-      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}`;
+      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`;
 
     /* ===== TUNING ===== */
     const MIN_STEP_M = 2;               // เพิ่มจุดลงเส้นเมื่อขยับ >= 2 ม.
@@ -366,7 +361,7 @@
           const rawName   = r.c[0]?.v ?? r.c[0]?.f;   // Name
           const rawLat    = r.c[1]?.v ?? r.c[1]?.f;   // Latitude
           const rawLng    = r.c[2]?.v ?? r.c[2]?.f;   // Longitude
-          const rawStatus = r.c[8]?.v ?? r.c[8]?.f;   // Status (ถ้าตำแหน่งเปลี่ยน ให้ปรับเลข index)
+          const rawStatus = r.c[8]?.v ?? r.c[8]?.f;   // Status
 
           const latNum = toNumber(rawLat);
           const lngNum = toNumber(rawLng);
@@ -456,7 +451,6 @@
       map.setView([latitude, longitude], Math.max(map.getZoom(), 17));
 
       // แสดงพิกัด
-      const statusEl = document.getElementById('status');
       statusEl.innerHTML =
         `📍 ${latitude.toFixed(5)}, ${longitude.toFixed(5)} (±${accuracy.toFixed(1)} m)`;
 
